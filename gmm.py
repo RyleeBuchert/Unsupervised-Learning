@@ -1,113 +1,106 @@
+from scipy.stats import multivariate_normal
 from gaussian_data import Gaussian_Data
+from matplotlib.pyplot import fill
 import matplotlib.pyplot as plt
-from skimage import io
 import seaborn as sns
 import pandas as pd
 import numpy as np
-import random
 
 
-class K_Means():
+class GMM():
 
-    def __init__(self):
-        self.point_assignments = []
-        self.points = None
-        self.results_dict = {}
+    def __init__(self, k, max_iter=None):
+        self.k = k
+        self.max_iter = max_iter if max_iter else 5
 
-    def get_score(self):
-        euclidean_sum = 0
-        for idx, row in self.points.iterrows():
-            euclidean_sum += np.sqrt((row['point'] - row['cluster'])**2)
-        return euclidean_sum
+    def initialize(self, X_train):
+        self.shape = X_train.shape
+        self.n = self.shape[0]
+        if len(self.shape) > 1:
+            self.m = self.shape[1]
 
-    def train(self, k, input_data, iterations):
-        # Get list of input data
-        self.points = pd.DataFrame(input_data)
-        self.train_list = list(input_data)
+        self.phi = np.full(shape=self.k, fill_value=1/self.k)
+        self.weights = np.full(shape=self.shape, fill_value=1/self.k)
 
-        # Initialize cluster centers through random sampling
-        self.cluster_centroids = random.sample(self.train_list, k)
+        random_row = np.random.randint(low=0, high=self.n, size=self.k)
+        if len(self.shape) == 1:
+            self.mu = [X_train[index] for index in random_row]
+            self.sigma = [np.cov(X_train.T) for _ in range(self.k)]
+        else:
+            self.mu = [X_train[row_index,:] for row_index in random_row]
+            self.sigma = [np.cov(X_train.T) for _ in range(self.k)]
 
-        # Loop for number of iterations
-        for iter in range(iterations):
-            # Assign data points to closest cluster
-            self.point_assignments = []
-            for i in self.train_list:
-                closest_distance = None
-                closest_point = None
-                for j in self.cluster_centroids:
-                    distance = np.sqrt((i - j)**2)
-                    if closest_distance is None:
-                        closest_distance = distance
-                        closest_point = j
-                    elif distance < closest_distance:
-                        closest_distance = distance
-                        closest_point = j  
-                self.point_assignments.append(closest_point)
-            self.points['cluster'] = self.point_assignments
+    def e_step(self, X_train):
+        self.weights = self.predict_probability(X_train)
+        self.phi = self.weights.mean(axis=0)
 
-            # Update results dictionary
-            self.results_dict.update({iter+1: {'centroids': self.cluster_centroids, 'score': self.get_score()}})
+    def m_step(self, X_train):
+        for i in range(self.k):
+            weight = self.weights[:, [i]]
+            total_weight = weight.sum()
+            self.mu[i] = (X_train * weight).sum(axis=0) / total_weight
+            self.sigma[i] = np.cov(X_train.T, aweights=(weight/total_weight).flatten(), bias=True)
 
-            # Don't update centroids on final iteration
-            if iter == iterations-1:
-                break
+    def train(self, X_train):
+        self.initialize(X_train)
 
-            # Update centroids for next iteration
-            new_clusters = []
-            for idx, j in enumerate(self.cluster_centroids):
-                data_subset = self.points.loc[self.points['cluster'] == j]
-                data_mean = data_subset['point'].mean()
-                new_clusters.append(data_mean)
-            self.cluster_centroids = new_clusters
+        for i in range(self.max_iter):
+            self.e_step(X_train)
+            self.m_step(X_train)
 
-    def get_results(self, labels):
+    def predict_probability(self, X_train):
+        likelihood = np.zeros((self.n, self.k))
+
+        for i in range(self.k):
+            distribution = multivariate_normal(mean=self.mu[i], cov=self.sigma[i])
+            likelihood[:, i] = distribution.pdf(X_train)
+        
+        numerator = likelihood * self.phi
+        denominator = numerator.sum(axis=1)[:, np.newaxis]
+        weights = numerator / denominator
+        return weights
+
+    def predict(self, X_train):
+        weights = self.predict_probability(X_train)
+        return np.argmax(weights, axis=1)
+
+    def get_results(self, df):
+        clusters = df.predictions.unique()
         cluster_stats = {}
-        for idx, i in enumerate(self.cluster_centroids):
-            data_subset = self.points.loc[self.points['cluster'] == i]
+        for idx, i in enumerate(clusters):
+            data_subset = df.loc[df['predictions'] == i]
             cluster_stats.update({idx+1: {'mean': data_subset['point'].mean(), 'sd': data_subset['point'].std()}})
-
-        labelled_points = self.points
-        labelled_points['mean'] = labels
 
         correct_count = 0
         total_count = 0
-        for i in self.cluster_centroids:
+        for i in clusters:
             for j in range(100):
-                data_subset = labelled_points.loc[labelled_points['cluster'] == i]
+                data_subset = df.loc[df['predictions'] == i]
                 sample_pair = data_subset.sample(n=2)
                 if sample_pair.iloc[0]['mean'] == sample_pair.iloc[1]['mean']:
                     correct_count += 1
                 total_count += 1
-
+        
         return (cluster_stats, correct_count/total_count)
-
-    def return_results_dict(self):
-        return self.results_dict
 
 
 if __name__ == "__main__":
 
     Data = Gaussian_Data()
-    test_data = Data.read_gaussian(12)
-    test_points = test_data[2]['point']
+    test_data = Data.read_gaussian(14)
+    test_df = test_data[2]
+    test_points = np.array(test_df['point']).reshape((len(test_df), 1))
 
-    K_Means = K_Means()
-    K_Means.train(k=test_data[0], input_data=test_points, iterations=10)
-    results = K_Means.get_results(test_data[2]['mean'])
-    
-    results_dict = K_Means.return_results_dict()
-    score_list = []
-    for key, val in results_dict.items():
-        score_list.append(val['score'])
-    x_list = list(range(len(score_list)))
-    plt.plot(x_list, score_list)
-    plt.show()
-    print()
+    gmm = GMM(test_data[0], 50)
+    gmm.train(test_points)
+    preds = gmm.predict(test_points)
+
+    test_df['predictions'] = preds.tolist()
+    results = gmm.get_results(test_df)
 
 
 
-    # log_file = open('Results\\gaussian_exp1_results.txt', 'w')
+    # log_file = open('Results\\GMM\\gaussian_exp1_results.txt', 'w')
 
     # # Get results for experiment 1 datasets with generators = 3
     # files = [1, 2, 3, 4]
@@ -117,11 +110,15 @@ if __name__ == "__main__":
 
     #         data = Gaussian_Data()
     #         test_data = data.read_gaussian(file)
-    #         test_points = test_data[2]['point']
+    #         test_df = test_data[2]
+    #         test_points = np.array(test_df['point']).reshape((len(test_df), 1))
 
-    #         k_means = K_Means()
-    #         k_means.train(source, test_points, 50)
-    #         results = k_means.get_results(test_data[2]['mean'])
+    #         gmm = GMM(source, 50)
+    #         gmm.train(test_points)
+    #         preds = gmm.predict(test_points)
+
+    #         test_df['predictions'] = preds.tolist()
+    #         results = gmm.get_results(test_df)
 
     #         data_mean_list = []
     #         data_sd_list = []
@@ -159,11 +156,15 @@ if __name__ == "__main__":
     # for file in files:
     #     data = Gaussian_Data()
     #     test_data = data.read_gaussian(file)
-    #     test_points = test_data[2]['point']
+    #     test_df = test_data[2]
+    #     test_points = np.array(test_df['point']).reshape((len(test_df), 1))
 
-    #     k_means = K_Means()
-    #     k_means.train(test_data[0], test_points, 50)
-    #     results = k_means.get_results(test_data[2]['mean'])
+    #     gmm = GMM(test_data[0], 50)
+    #     gmm.train(test_points)
+    #     preds = gmm.predict(test_points)
+
+    #     test_df['predictions'] = preds.tolist()
+    #     results = gmm.get_results(test_df)
 
     #     data_mean_list = []
     #     data_sd_list = []
@@ -198,18 +199,22 @@ if __name__ == "__main__":
 
 
 
-    # log_file = open('Results\\gaussian_exp2_results.txt', 'w')
+    # log_file = open('Results\\GMM\\gaussian_exp2_results.txt', 'w')
 
     # # Get results for experiment 2
     # files = [13, 14, 15]
     # for file in files:
     #     data = Gaussian_Data()
     #     test_data = data.read_gaussian(file)
-    #     test_points = test_data[2]['point']
+    #     test_df = test_data[2]
+    #     test_points = np.array(test_df['point']).reshape((len(test_df), 1))
 
-    #     k_means = K_Means()
-    #     k_means.train(test_data[0], test_points, 50)
-    #     results = k_means.get_results(test_data[2]['mean'])
+    #     gmm = GMM(test_data[0], 50)
+    #     gmm.train(test_points)
+    #     preds = gmm.predict(test_points)
+
+    #     test_df['predictions'] = preds.tolist()
+    #     results = gmm.get_results(test_df)
 
     #     data_mean_list = []
     #     data_sd_list = []
@@ -244,18 +249,22 @@ if __name__ == "__main__":
 
 
 
-    # log_file = open('Results\\gaussian_exp3_results.txt', 'w')
+    # log_file = open('Results\\GMM\\gaussian_exp3_results.txt', 'w')
 
     # # Get results for experiment 3
     # files = [16]
     # for file in files:
     #     data = Gaussian_Data()
     #     test_data = data.read_gaussian(file)
-    #     test_points = test_data[2]['point']
+    #     test_df = test_data[2]
+    #     test_points = np.array(test_df['point']).reshape((len(test_df), 1))
 
-    #     k_means = K_Means()
-    #     k_means.train(test_data[0], test_points, 50)
-    #     results = k_means.get_results(test_data[2]['mean'])
+    #     gmm = GMM(test_data[0], 50)
+    #     gmm.train(test_points)
+    #     preds = gmm.predict(test_points)
+
+    #     test_df['predictions'] = preds.tolist()
+    #     results = gmm.get_results(test_df)
 
     #     data_mean_list = []
     #     data_sd_list = []
@@ -290,18 +299,22 @@ if __name__ == "__main__":
 
 
 
-    # log_file = open('Results\\gaussian_exp4_results.txt', 'w')
+    # log_file = open('Results\\GMM\\gaussian_exp4_results.txt', 'w')
 
     # # Get results for experiment 4
     # files = [17, 18, 19]
     # for file in files:
     #     data = Gaussian_Data()
     #     test_data = data.read_gaussian(file)
-    #     test_points = test_data[2]['point']
+    #     test_df = test_data[2]
+    #     test_points = np.array(test_df['point']).reshape((len(test_df), 1))
 
-    #     k_means = K_Means()
-    #     k_means.train(test_data[0], test_points, 50)
-    #     results = k_means.get_results(test_data[2]['mean'])
+    #     gmm = GMM(test_data[0], 50)
+    #     gmm.train(test_points)
+    #     preds = gmm.predict(test_points)
+
+    #     test_df['predictions'] = preds.tolist()
+    #     results = gmm.get_results(test_df)
 
     #     data_mean_list = []
     #     data_sd_list = []
@@ -336,37 +349,26 @@ if __name__ == "__main__":
 
 
 
-    # # K-Means for housing in California
+    # # Housing data
+    # plt.style.use("seaborn-whitegrid")
+    # plt.rc("figure", autolayout=True)
+    # plt.rc(
+    #     "axes",
+    #     labelweight="bold",
+    #     labelsize="large",
+    #     titleweight="bold",
+    #     titlesize=14,
+    #     titlepad=10,
+    # )
+
     # housing_data = pd.read_csv('Data\\California_Housing\\housing.csv')
     # housing_data = housing_data.loc[:, ["median_income", "latitude", "longitude"]]
 
-    # # Fit model
-    # k_means = K_Means()
-    # k_means.train(10, housing_data, 50)
+    # gmm = GMM(10, 50)
+    # gmm.train(housing_data)
+    # housing_data['Cluster'] = gmm.predict(housing_data)
+    # housing_data['Cluster'] = housing_data['Cluster'].astype("category")
+    # print(housing_data.head())
 
-
-
-    # # K-Means for image compression
-    # image = io.imread('Images\\f1_car.jpg')
-    # io.imshow(image)
-    # io.show()
-
-    # # Dimension of the original image
-    # rows = image.shape[0]
-    # cols = image.shape[1]
-
-    # # Flatten the image
-    # image = image.reshape(rows*cols, 3)
-
-    # # Fit model
-    # k_means = K_Means()
-    # k_means.train(32, image, 50)
-
-    # # Compress image and reshape to original dimension
-    # compressed_image = k_means.cluster_centers_[k_means.labels_]
-    # compressed_image = compressed_image.reshape(rows, cols, 3)
-
-    # # Save and display compressed image
-    # io.imsave('compressed_image_64.png', compressed_image)
-    # io.imshow(compressed_image)
-    # io.show()
+    # sns.relplot(x="longitude", y="latitude", hue="Cluster", data=housing_data, height=6)
+    # plt.show()
