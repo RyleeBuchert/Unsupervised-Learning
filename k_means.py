@@ -89,11 +89,11 @@ class K_Means():
 if __name__ == "__main__":
 
     Data = Gaussian_Data()
-    test_data = Data.read_gaussian(12)
+    test_data = Data.read_gaussian(14)
     test_points = test_data[2]['point']
 
     K_Means = K_Means()
-    K_Means.train(k=test_data[0], input_data=test_points, iterations=10)
+    K_Means.train(k=test_data[0], input_data=test_points, iterations=50)
     results = K_Means.get_results(test_data[2]['mean'])
     
     results_dict = K_Means.return_results_dict()

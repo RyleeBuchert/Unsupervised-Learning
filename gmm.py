@@ -12,6 +12,7 @@ class GMM():
     def __init__(self, k, max_iter=None):
         self.k = k
         self.max_iter = max_iter if max_iter else 5
+        self.results_dict = {}
 
     def initialize(self, X_train):
         self.shape = X_train.shape
@@ -47,6 +48,8 @@ class GMM():
         for i in range(self.max_iter):
             self.e_step(X_train)
             self.m_step(X_train)
+            self.get_score(i, X_train)
+            print(i)
 
     def predict_probability(self, X_train):
         likelihood = np.zeros((self.n, self.k))
@@ -63,6 +66,28 @@ class GMM():
     def predict(self, X_train):
         weights = self.predict_probability(X_train)
         return np.argmax(weights, axis=1)
+
+    def get_score(self, iter, X_train):
+        point_assignments = []
+        for i in X_train:
+            closest_distance = None
+            closest_point = None
+            for j in self.mu:
+                distance = np.sqrt((i[0] - j[0])**2)
+                if closest_distance is None:
+                    closest_distance = distance
+                    closest_point = j[0]
+                elif distance < closest_distance:
+                    closest_distance = distance
+                    closest_point = j[0]
+            point_assignments.append(closest_point)
+
+        points_df = pd.DataFrame(X_train, columns=['point'])
+        points_df['cluster'] = point_assignments
+        euclidean_sum = 0
+        for idx, row in points_df.iterrows():
+            euclidean_sum += np.sqrt((row['point'] - row['cluster'])**2)
+        self.results_dict.update({iter+1: euclidean_sum})        
 
     def get_results(self, df):
         clusters = df.predictions.unique()
@@ -83,6 +108,9 @@ class GMM():
         
         return (cluster_stats, correct_count/total_count)
 
+    def return_results_dict(self):
+        return self.results_dict
+
 
 if __name__ == "__main__":
 
@@ -97,7 +125,15 @@ if __name__ == "__main__":
 
     test_df['predictions'] = preds.tolist()
     results = gmm.get_results(test_df)
+    results_dict = gmm.return_results_dict()
 
+    score_list = []
+    for key, val in results_dict.items():
+        score_list.append(val)
+    x_list = list(range(len(score_list)))
+    plt.plot(x_list, score_list)
+    plt.show()
+    print()
 
 
     # log_file = open('Results\\GMM\\gaussian_exp1_results.txt', 'w')
