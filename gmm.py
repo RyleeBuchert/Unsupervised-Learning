@@ -49,7 +49,6 @@ class GMM():
             self.e_step(X_train)
             self.m_step(X_train)
             self.get_score(i, X_train)
-            print(i)
 
     def predict_probability(self, X_train):
         likelihood = np.zeros((self.n, self.k))

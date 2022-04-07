@@ -1,4 +1,5 @@
 from gaussian_data import Gaussian_Data
+from gmm import GMM
 import matplotlib.pyplot as plt
 from skimage import io
 import seaborn as sns
@@ -88,8 +89,9 @@ class K_Means():
 
 if __name__ == "__main__":
 
+    # Score K-Means
     Data = Gaussian_Data()
-    test_data = Data.read_gaussian(14)
+    test_data = Data.read_gaussian(19)
     test_points = test_data[2]['point']
 
     K_Means = K_Means()
@@ -97,14 +99,35 @@ if __name__ == "__main__":
     results = K_Means.get_results(test_data[2]['mean'])
     
     results_dict = K_Means.return_results_dict()
-    score_list = []
+    km_score_list = []
     for key, val in results_dict.items():
-        score_list.append(val['score'])
-    x_list = list(range(len(score_list)))
-    plt.plot(x_list, score_list)
-    plt.show()
-    print()
+        km_score_list.append(val['score'])
+    x_list = list(range(len(km_score_list)))
 
+    # Score GMM
+    Data = Gaussian_Data()
+    test_data = Data.read_gaussian(19)
+    test_df = test_data[2]
+    test_points = np.array(test_df['point']).reshape((len(test_df), 1))
+
+    gmm = GMM(test_data[0], 50)
+    gmm.train(test_points)
+    preds = gmm.predict(test_points)
+
+    test_df['predictions'] = preds.tolist()
+    results = gmm.get_results(test_df)
+    results_dict = gmm.return_results_dict()
+
+    gmm_score_list = []
+    for key, val in results_dict.items():
+        gmm_score_list.append(val)
+    x_list = list(range(len(gmm_score_list)))
+
+    # Plot results
+    plt.plot(x_list, km_score_list, label = "K-Means")
+    plt.plot(x_list, gmm_score_list, label = "GMM")
+    plt.legend()
+    plt.show()
 
 
     # log_file = open('Results\\gaussian_exp1_results.txt', 'w')

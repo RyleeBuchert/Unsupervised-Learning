@@ -5,9 +5,9 @@ import numpy as np
 
 if __name__ == "__main__":
     #Read the image
-    image = io.imread('Images\\f1_car.jpg')
-    io.imshow(image)
-    io.show()
+    image = io.imread('Pictures\\fuji.jpg')
+    # io.imshow(image)
+    # io.show()
 
     #Dimension of the original image
     rows = image.shape[0]
@@ -17,7 +17,7 @@ if __name__ == "__main__":
     image = image.reshape(rows*cols, 3)
 
     #Implement k-means clustering to form k clusters
-    kmeans = KMeans(n_clusters=8)
+    kmeans = KMeans(n_clusters=3)
     kmeans.fit(image)
 
     #Replace each pixel value with its nearby centroid
@@ -28,6 +28,6 @@ if __name__ == "__main__":
     compressed_image = compressed_image.reshape(rows, cols, 3)
 
     #Save and display output image
-    io.imsave('Images\\compressed_f1_car.jpg', compressed_image)
+    # io.imsave('Images\\compressed_f1_car.jpg', compressed_image)
     io.imshow(compressed_image)
     io.show()

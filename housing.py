@@ -21,10 +21,10 @@ if __name__ == "__main__":
     housing_data = pd.read_csv('Data\\California_Housing\\housing.csv')
     housing_data = housing_data.loc[:, ["median_income", "latitude", "longitude"]]
 
-    k_means = KMeans(10)
+    k_means = KMeans(5)
     housing_data['Cluster'] = k_means.fit_predict(housing_data)
     housing_data['Cluster'] = housing_data['Cluster'].astype("category")
-    print(housing_data.head())
+    # print(housing_data.head())
 
     sns.relplot(x="longitude", y="latitude", hue="Cluster", data=housing_data, height=6)
     plt.show()
@@ -45,10 +45,10 @@ if __name__ == "__main__":
     housing_data = pd.read_csv('Data\\California_Housing\\housing.csv')
     housing_data = housing_data.loc[:, ["median_income", "latitude", "longitude"]]
 
-    gmm = GaussianMixture(10)
+    gmm = GaussianMixture(5)
     housing_data['Cluster'] = gmm.fit_predict(housing_data)
     housing_data['Cluster'] = housing_data['Cluster'].astype("category")
-    print(housing_data.head())
+    # print(housing_data.head())
 
     sns.relplot(x="longitude", y="latitude", hue="Cluster", data=housing_data, height=6)
     plt.show()
